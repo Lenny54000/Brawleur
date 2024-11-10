@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pokedex de Brawlers</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; }
+        h1 { color: #3498db; }
+        .brawler-list, .tournament { display: flex; flex-wrap: wrap; justify-content: center; margin-top: 20px; }
+        .brawler-card { perspective: 1000px; margin: 10px; cursor: pointer; width: 150px; height: 200px; }
+        
+        /* Style pour la face avant et arrière de la carte */
+        .card-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.6s; transform-style: preserve-3d; }
+        .card-front, .card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border: 1px solid #ccc; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; }
+        .card-front { background-color: #fff; }
+        .card-back { background-color: #f0f0f0; transform: rotateY(180deg); }
+        
+        /* Effet de retournement */
+        .brawler-card.flipped .card-inner { transform: rotateY(180deg); }
+        
+        /* Tournoi */
+        .match { display: flex; align-items: center; margin: 10px; }
+        .vs { font-size: 24px; margin: 0 15px; }
+    </style>
+</head>
+<body>
+
+    <h1>Tournoi des Brawlers</h1>
+    <div class="brawler-list" id="brawlerList"></div>
+
+    <div class="tournament">
+        <h2>Créer un Tournoi</h2>
+        <button onclick="createTournament()">Démarrer le Tournoi</button>
+        <div id="tournamentRounds"></div>
+        <div id="finalRanking"></div>
+    </div>
+
+    <script>
+        let brawlers = [];
+        let tournamentRounds = [];
+        let currentRound = [];
+        let nextRound = [];
+        let losers = []; // Liste pour garder les perdants de chaque round
+        let ranking = []; // Liste pour le classement final
+
+        // Charger les Brawlers depuis l'API dès que la page s'affiche
+        document.addEventListener('DOMContentLoaded', () => {
+            loadBrawlers();
+        });
+
+        // Charger les Brawlers depuis l'API
+        async function loadBrawlers() {
+            const response = await fetch('https://api.brawlapi.com/v1/brawlers');
+            const data = await response.json();
+            brawlers = data.list;
+            displayBrawlers();
+        }
+
+        // Afficher les Brawlers dans le Pokedex
+        function displayBrawlers() {
+            const brawlerList = document.getElementById('brawlerList');
+            brawlerList.innerHTML = ''; // Reset la liste
+
+            brawlers.forEach(brawler => {
+                const brawlerCard = document.createElement('div');
+                brawlerCard.className = 'brawler-card';
+                
+                // Structure interne de la carte
+                brawlerCard.innerHTML = `
+                    <div class="card-inner">
+                        <div class="card-front">
+                            <img src="${brawler.imageUrl}" alt="${brawler.name}" width="100">
+                            <h3>${brawler.name}</h3>
+                        </div>
+                        <div class="card-back">
+                            <h3>${brawler.name}</h3>
+                            <p>PV: ${brawler.health}</p>
+                            <p>Dégâts: ${brawler.attack.damage}</p>
+                            <p>Super: ${brawler.super.description}</p>
+                        </div>
+                    </div>
+                `;
+                
+                // Toggle pour retourner la carte
+                brawlerCard.addEventListener('click', () => {
+                    brawlerCard.classList.toggle('flipped');
+                });
+
+                brawlerList.appendChild(brawlerCard);
+            });
+        }
+
+        // Créer un tournoi en pyramide avec classement
+        function createTournament() {
+            shuffle(brawlers); // Mélanger les brawlers pour le tournoi
+            tournamentRounds = [];
+            currentRound = [...brawlers];
+            nextRound = [];
+            losers = [];
+            ranking = [];
+            roundIndex = 0;
+
+            showMatch();
+        }
+
+        // Afficher un match individuel avec deux cartes
+        function showMatch() {
+            const tournamentRoundsDiv = document.getElementById('tournamentRounds');
+            tournamentRoundsDiv.innerHTML = `<h3>Tour ${roundIndex + 1}</h3>`;
+
+            if (currentRound.length >= 2) {
+                const brawler1 = currentRound[0];
+                const brawler2 = currentRound[1];
+
+                const matchDiv = document.createElement('div');
+                matchDiv.className = 'match';
+
+                // Carte du brawler 1
+                const brawler1Card = document.createElement('div');
+                brawler1Card.className = 'brawler-card';
+                brawler1Card.innerHTML = `
+                    <div class="card-inner">
+                        <div class="card-front">
+                            <img src="${brawler1.imageUrl}" alt="${brawler1.name}" width="100">
+                            <h3>${brawler1.name}</h3>
+                        </div>
+                    </div>
+                `;
+                brawler1Card.addEventListener('click', () => selectWinner(brawler1, brawler2));
+
+                // "VS" entre les cartes
+                const vsText = document.createElement('div');
+                vsText.className = 'vs';
+                vsText.textContent = "VS";
+
+                // Carte du brawler 2
+                const brawler2Card = document.createElement('div');
+                brawler2Card.className = 'brawler-card';
+                brawler2Card.innerHTML = `
+                    <div class="card-inner">
+                        <div class="card-front">
+                            <img src="${brawler2.imageUrl}" alt="${brawler2.name}" width="100">
+                            <h3>${brawler2.name}</h3>
+                        </div>
+                    </div>
+                `;
+                brawler2Card.addEventListener('click', () => selectWinner(brawler2, brawler1));
+
+                // Ajout des éléments à la div de match
+                matchDiv.appendChild(brawler1Card);
+                matchDiv.appendChild(vsText);
+                matchDiv.appendChild(brawler2Card);
+                tournamentRoundsDiv.innerHTML = ''; // Clear previous match
+                tournamentRoundsDiv.appendChild(matchDiv);
+            } else if (nextRound.length > 1) {
+                // Enregistrer les perdants dans le classement
+                ranking = ranking.concat(losers.reverse());
+                losers = [];
+                // Passer au tour suivant
+                currentRound = nextRound;
+                nextRound = [];
+                roundIndex++;
+                showMatch();
+            } else {
+                // Enregistrer le gagnant final
+                ranking = [nextRound[0]].concat(ranking.concat(losers.reverse()));
+                displayFinalRanking();
+            }
+        }
+
+        // Sélectionner le gagnant du match
+        function selectWinner(winner, loser) {
+            nextRound.push(winner);
+            losers.push(loser);
+
+            // Retirer les brawlers sélectionnés du round actuel
+            currentRound.splice(0, 2);
+            showMatch();
+        }
+
+        // Afficher le classement final des Brawlers
+        function displayFinalRanking() {
+            const finalRankingDiv = document.getElementById('finalRanking');
+            finalRankingDiv.innerHTML = '<h2>Classement Final</h2>';
+            
+            ranking.forEach((brawler, index) => {
+                const brawlerDiv = document.createElement('div');
+                brawlerDiv.className = 'brawler-card';
+                brawlerDiv.innerHTML = `
+                    <div class="card-inner">
+                        <div class="card-front">
+                            <img src="${brawler.imageUrl}" alt="${brawler.name}" width="100">
+                            <h3>${index + 1}. ${brawler.name}</h3>
+                        </div>
+                    </div>
+                `;
+                finalRankingDiv.appendChild(brawlerDiv);
+            });
+        }
+
+        // Fonction pour mélanger les brawlers (Random Shuffle)
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+    </script>
+</body>
+</html>
+
